@@ -72,15 +72,16 @@
 
     /* ── Card shell ── */
     .card {
-      --rx: 0deg;
-      --ry: 0deg;
-      --s: 1;
-      --mx: 50%;
-      --my: 50%;
+      --rx:  0deg;
+      --ry:  0deg;
+      --s:   1;
+      --mx:  50%;
+      --my:  50%;
       --bgx: 50%;
       --bgy: 50%;
+      --pfc: 0;        /* pointer-from-center: 0 = at center, 1 = at corner */
 
-      width: clamp(200px, 38vw, 270px);
+      width: clamp(230px, 40vw, 290px);
       aspect-ratio: 5 / 7;
       position: relative;
       cursor: pointer;
@@ -115,9 +116,9 @@
       border-radius: inherit;
     }
 
-    /* ══════════════════════════════
+    /* ══════════════════════════════════════════════
        HOLOGRAPHIC EFFECT LAYERS
-       ══════════════════════════════ */
+       ══════════════════════════════════════════════ */
 
     .card-holo,
     .card-sparkles,
@@ -125,72 +126,103 @@
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      opacity: 0;
-      transition: opacity 0.35s ease;
+      pointer-events: none;
     }
 
-    /* Layer 1 — rainbow foil (color-dodge shifts with bg position) */
+    /*
+     * Layer 1 — rainbow foil + crystal crosshatch grid
+     *
+     * How it works:
+     *  • Three background layers stacked bottom→top:
+     *    [2] 45°  crystal stripes  (transparent dark + white bright bands)
+     *    [1] 133° crystal stripes  (transparent dark + white bright bands)
+     *    [0] Rainbow gradient      (semi-transparent, shifts with bgx/bgy)
+     *        – angle rotates with card tilt (var(--ry))
+     *        – reveals different hues as you tilt
+     *  • The two crystal layers create an INTERSECTING diamond grid;
+     *    where both bands coincide the composite is brightest.
+     *  • filter: brightness(0.42) contrast(1.8) accentuates bright bands
+     *    and suppresses dark areas before color-dodge is applied.
+     *  • mix-blend-mode: color-dodge then lifts only the card's lighter
+     *    pixels with rainbow colour, leaving dark card areas unaffected.
+     *  • opacity driven by --pfc: 0 when pointer is at centre (no tilt),
+     *    rising to ~1 at the card's corner (max tilt) — matches real foil.
+     */
     .card-holo {
       background-image:
+        /* [0] Semi-transparent rainbow – angle tracks card tilt */
         repeating-linear-gradient(
-          0deg,
-          hsl(  0, 100%, 68%) 0%,
-          hsl( 45, 100%, 68%) 12.5%,
-          hsl( 90, 100%, 68%) 25%,
-          hsl(135, 100%, 68%) 37.5%,
-          hsl(180, 100%, 68%) 50%,
-          hsl(225, 100%, 68%) 62.5%,
-          hsl(270, 100%, 68%) 75%,
-          hsl(315, 100%, 68%) 87.5%,
-          hsl(  0, 100%, 68%) 100%
+          calc(90deg + var(--ry, 0deg) * 2),
+          hsla(  0, 100%, 50%, 0.65) 0%,
+          hsla( 60, 100%, 50%, 0.65) 8.33%,
+          hsla(120, 100%, 50%, 0.65) 16.66%,
+          hsla(180, 100%, 50%, 0.65) 25%,
+          hsla(240, 100%, 50%, 0.65) 33.33%,
+          hsla(300, 100%, 50%, 0.65) 41.66%,
+          hsla(  0, 100%, 50%, 0.65) 50%
         ),
+        /* [1] Crystal stripes at 133° */
         repeating-linear-gradient(
           133deg,
-          #0d1232 0%,
-          hsl(180, 10%, 82%) 3.5%,
-          hsl(180, 29%, 72%) 4.5%,
-          hsl(180, 10%, 82%) 5.5%,
-          #0d1232 10%,
-          #0d1232 12%
+          transparent       0%,    transparent       9%,
+          rgba(255,255,255,0.5) 9.5%,
+          rgba(255,255,255,0.8) 10.5%,
+          rgba(255,255,255,0.5) 11%,
+          transparent       11.5%, transparent       21%
+        ),
+        /* [2] Crystal stripes at 45° – creates diamond intersections */
+        repeating-linear-gradient(
+          45deg,
+          transparent       0%,    transparent       9%,
+          rgba(255,255,255,0.4) 9.5%,
+          rgba(255,255,255,0.7) 10.5%,
+          rgba(255,255,255,0.4) 11%,
+          transparent       11.5%, transparent       21%
         );
-      background-size: 300% 300%, 200% 700%;
-      background-position: var(--bgx) var(--bgy);
+
+      background-size:
+        160% 160%,   /* rainbow  – big enough to always show multiple hues */
+        100% 100%,   /* crystal1 – 1:1 with card gives ~4px stripe width   */
+        100% 100%;   /* crystal2 */
+
+      /* Crystal grids scroll at 60% the rate of the rainbow → relative drift */
+      background-position:
+        var(--bgx, 50%) var(--bgy, 50%),
+        calc(var(--bgx, 50%) * 0.6) calc(var(--bgy, 50%) * 0.6),
+        calc(var(--bgx, 50%) * 0.4) calc(var(--bgy, 50%) * 0.4);
+
       mix-blend-mode: color-dodge;
-      filter: brightness(0.55) contrast(3) saturate(1.3);
+
+      /* Bring rainbow closer to mid-range so color-dodge stays subtle */
+      filter: brightness(0.42) contrast(1.8) saturate(2);
+
+      /* Fade in from zero as the pointer moves away from card centre */
+      opacity: calc(var(--pfc, 0) * 0.95);
     }
 
-    /* Layer 2 — sparkle dot grid */
+    /* Layer 2 — soft local sparkle/glow at pointer position */
     .card-sparkles {
-      background-image:
-        radial-gradient(ellipse at var(--mx) var(--my),
-          rgba(255,255,255,0.4) 0%,
-          transparent 55%),
-        radial-gradient(circle, rgba(255,255,255,0.9) 0.5px, transparent 0.5px),
-        radial-gradient(circle, rgba(255,255,255,0.8) 0.5px, transparent 0.5px);
-      background-size: 100% 100%, 22px 22px, 15px 15px;
-      background-position: 0 0, 0 0, 6px 6px;
-      mix-blend-mode: color-dodge;
-      filter: brightness(1.2);
-    }
-
-    /* Layer 3 — specular glare */
-    .card-glare {
       background: radial-gradient(
-        farthest-corner circle at var(--mx) var(--my),
-        rgba(255, 255, 255, 0.88) 10%,
-        rgba(255, 255, 255, 0.60) 22%,
-        rgba(  0,   0,   0, 0.55) 90%
+        ellipse 60% 50% at var(--mx, 50%) var(--my, 50%),
+        rgba(255, 255, 255, 0.22) 0%,
+        transparent 80%
       );
       mix-blend-mode: overlay;
+      opacity: calc(var(--pfc, 0) * 0.8);
     }
 
-    /* Show effects on hover / while interacting */
-    .card:hover   .card-holo,
-    .card:hover   .card-sparkles,
-    .card:hover   .card-glare,
-    .card.active  .card-holo,
-    .card.active  .card-sparkles,
-    .card.active  .card-glare { opacity: 1; }
+    /* Layer 3 — specular highlight that follows the pointer */
+    .card-glare {
+      background: radial-gradient(
+        farthest-corner circle at var(--mx, 50%) var(--my, 50%),
+        rgba(255, 255, 255, 0.92) 10%,
+        rgba(255, 255, 255, 0.65) 22%,
+        rgba(  0,   0,   0, 0.52) 90%
+      );
+      mix-blend-mode: overlay;
+      /* Small base so the glare is barely visible even at centre */
+      opacity: calc(var(--pfc, 0) * 0.85 + 0.04);
+    }
 
     /* ── Credit ── */
     .credit {
@@ -217,7 +249,6 @@
       <div class="card-face">
         <img
           class="card-img"
-          id="card-img"
           src="https://images.pokemontcg.io/base1/4.png"
           alt="Charizard Holo"
           loading="eager"
@@ -241,7 +272,7 @@
   <script>
     'use strict';
 
-    const card = document.getElementById('card');
+    var card = document.getElementById('card');
 
     /* ── Spring physics ── */
     function Spring(init, k, d) {
@@ -260,7 +291,7 @@
       return Math.abs(this.t - this.v) < 0.04 && Math.abs(this.vel) < 0.04;
     };
 
-    const S = {
+    var S = {
       rx:  new Spring(0,  0.075, 0.52),
       ry:  new Spring(0,  0.075, 0.52),
       bgx: new Spring(50, 0.06,  0.50),
@@ -268,11 +299,12 @@
       mx:  new Spring(50, 0.10,  0.55),
       my:  new Spring(50, 0.10,  0.55),
       s:   new Spring(1,  0.05,  0.55),
+      pfc: new Spring(0,  0.09,  0.48),   /* pointer-from-centre, animates smoothly */
     };
 
-    let raf         = null;
-    let interacting = false;
-    let showId      = null;
+    var raf         = null;
+    var interacting = false;
+    var showId      = null;
 
     function push() {
       card.style.setProperty('--rx',  S.rx.v.toFixed(2)  + 'deg');
@@ -282,20 +314,35 @@
       card.style.setProperty('--mx',  S.mx.v.toFixed(1)  + '%');
       card.style.setProperty('--my',  S.my.v.toFixed(1)  + '%');
       card.style.setProperty('--s',   S.s.v.toFixed(4));
+      card.style.setProperty('--pfc', S.pfc.v.toFixed(3));
     }
 
     function loop() {
-      Object.values(S).forEach(function (s) { s.tick(); });
+      var keys = Object.keys(S);
+      for (var i = 0; i < keys.length; i++) S[keys[i]].tick();
       push();
-      var settled = !interacting && Object.values(S).every(function (s) { return s.settled(); });
+      var settled = !interacting;
+      if (settled) {
+        for (var j = 0; j < keys.length; j++) {
+          if (!S[keys[j]].settled()) { settled = false; break; }
+        }
+      }
       raf = settled ? null : requestAnimationFrame(loop);
     }
 
     function go() { if (!raf) raf = requestAnimationFrame(loop); }
 
+    function ptrFrom(px, py) {
+      /* Euclidean distance from card centre, clamped to [0,1] */
+      var dx = (px - 50) / 50;
+      var dy = (py - 50) / 50;
+      return Math.min(1, Math.sqrt(dx * dx + dy * dy));
+    }
+
     function aim(px, py) {
-      S.rx.t  = -(py - 50) / 50 * 18;
-      S.ry.t  =  (px - 50) / 50 * 18;
+      S.pfc.t = ptrFrom(px, py);
+      S.rx.t  = -(py - 50) / 50 * 15;   /* max ±15° tilt */
+      S.ry.t  =  (px - 50) / 50 * 15;
       S.bgx.t = px;
       S.bgy.t = py;
       S.mx.t  = px;
@@ -303,7 +350,8 @@
     }
 
     function reset() {
-      S.rx.t = S.ry.t = 0;
+      S.pfc.t = 0;
+      S.rx.t  = S.ry.t  = 0;
       S.bgx.t = S.bgy.t = 50;
       S.mx.t  = S.my.t  = 50;
       S.s.t   = 1;
@@ -316,7 +364,7 @@
         (e.clientX - r.left) / r.width  * 100,
         (e.clientY - r.top)  / r.height * 100
       );
-      S.s.t = 1.065;
+      S.s.t = 1.06;
       interacting = true;
       card.classList.add('active');
       go();
@@ -343,7 +391,7 @@
         Math.min(100, Math.max(0, (t.clientX - r.left) / r.width  * 100)),
         Math.min(100, Math.max(0, (t.clientY - r.top)  / r.height * 100))
       );
-      S.s.t = 1.065;
+      S.s.t = 1.06;
       interacting = true;
       card.classList.add('active');
       go();
@@ -356,12 +404,14 @@
       go();
     });
 
-    /* ── Device orientation (mobile tilt) ── */
+    /* ── Device orientation (mobile physical tilt) ── */
     window.addEventListener('deviceorientation', function (e) {
       if (interacting) return;
       var beta  = Math.min(60, Math.max(-60, e.beta  || 0));
       var gamma = Math.min(60, Math.max(-60, e.gamma || 0));
-      aim(50 + gamma / 60 * 40, 50 + beta / 60 * 40);
+      var px = 50 + gamma / 60 * 40;
+      var py = 50 + beta  / 60 * 40;
+      aim(px, py);
       card.classList.add('active');
       go();
     });
@@ -370,7 +420,7 @@
     function showcase() {
       if (interacting) return;
       var f = 0;
-      var total = 60 * 5;   /* 5 s at 60 fps */
+      var total = 60 * 5;  /* 5 s */
 
       (function frame() {
         if (interacting) {
@@ -380,13 +430,14 @@
           return;
         }
         f++;
-        var t  = (f / 60) * Math.PI * 2 * 0.45;
-        var px = 50 + Math.sin(t)        * 38;
-        var py = 50 + Math.cos(t * 0.78) * 30;
+        var t  = (f / 60) * Math.PI * 2 * 0.42;
+        var px = 50 + Math.sin(t)        * 34;
+        var py = 50 + Math.cos(t * 0.78) * 26;
+        S.pfc.t = ptrFrom(px, py);
         S.bgx.t = px;
         S.bgy.t = py;
-        S.rx.t  = -Math.cos(t * 0.78) * 13;
-        S.ry.t  =  Math.sin(t)         * 16;
+        S.rx.t  = -Math.cos(t * 0.78) * 10;
+        S.ry.t  =  Math.sin(t)         * 12;
         S.mx.t  = px;
         S.my.t  = py;
         card.classList.add('active');
@@ -402,7 +453,7 @@
       }());
     }
 
-    /* Kick off showcase on load */
+    /* Start showcase shortly after load */
     showId = setTimeout(showcase, 900);
   </script>
 </body>
